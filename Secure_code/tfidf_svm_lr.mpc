@@ -1,0 +1,86 @@
+sfix.set_precision(16, 32)
+
+# read input array length from commandline arguments and create array
+
+#a_length = int(program.args[1])
+#b_length = int(program.args[2])
+
+a_length = 50
+b_length = 200
+
+a_text = Array(a_length, sint)
+b_dict = Array(b_length, sint)
+
+# Define number of threads and number of loop bodies
+n_threads = int(b_length / 2)
+n_features = int(b_length)
+
+# Assign player(Alice's) data to the arrays
+@for_range(a_length)
+def f(i):
+    a_text.assign(sint.get_input_from(0), i)
+
+# Assign player(Bob's) data to the arrays
+@for_range(b_length)
+def f(i):
+    b_dict.assign(sint.get_input_from(1), i)
+
+# create empty TF array of the length of Bob's features
+x_tf = Array(b_length, sint)
+x_tf.assign_all(0)
+
+# Secure comparison
+# Result: Check for each feature in Bob's dict if it also exist in Alice's dict and then give the TF count.
+
+@for_range_opt_multithread(n_threads, n_features)
+def f(i):
+    @for_range_opt(a_length)
+    def f(j):
+        x_tf[i] = x_tf[i] + a_text[j].equal(b_dict[i])
+
+#print_ln("x_tf is %s", x_tf.reveal())
+
+
+# create IDF array and read IDF values from player 2
+b_idf = Array(b_length, sfix)
+
+@for_range(b_length)
+def f(i):
+    b_idf.assign(sfix.get_input_from(1), i)
+
+#print_ln('IDF: %s', b_idf.reveal())
+
+# element wise multiplication of TF and IDF array
+tf_idf = Array(b_length, sfix)
+tf_idf.assign_vector(x_tf.get_vector() * b_idf.get_vector())
+
+#print_ln('TF-IDF: %s', tf_idf.reveal())
+
+# create an empty array with "length + 1" as tf_idf array to add bias at the end
+length_bias = b_length + 1
+tf_idf_bias = Array(length_bias, sfix)
+
+# copy values from tf_idf to tf_idf_bias plus a bias term with value 1 
+tf_idf_bias.assign_vector(tf_idf.get_vector()) 
+tf_idf_bias.__setitem__(b_length, 1)
+
+#print_ln('tf_idf_bias: %s', tf_idf_bias.reveal())
+
+# create SVM coeff array and read it's values from player 2
+b_svm_coeff = Array(b_length + 1, sfix)
+
+@for_range(b_length + 1)
+def f(i):
+    b_svm_coeff.assign(sfix.get_input_from(1), i)
+
+#print_ln('b_svm_coeff: %s', b_svm_coeff.reveal())
+
+# SVM = c1*F1 + c2*F2 + --- + cn*Fn + 1*intercept = V
+# dot product between tf-idf values and SVM coeffs with intercept
+
+predicted_distance = sfix.dot_product(tf_idf_bias, b_svm_coeff)
+print_ln('Final Distance: %s', predicted_distance.reveal())
+
+# final label is 0 if predicted_distance is leass than 1 otherwise 0
+label = predicted_distance > 1
+print_ln('Final Label: %s', label.reveal())
